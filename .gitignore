@@ -55,8 +55,9 @@ namenode/
 datanode/
 hdfs-data/
 
-# Test data directories (created by store tests)
-*/
+# Test data directories (created by store tests and servers)
+*_network/
+ggnetwork/
 momsbestpicture/
 momsspecials/
 

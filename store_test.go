@@ -44,6 +44,9 @@ func TestStore(t *testing.T) {
 		}
 
 		b, _ := io.ReadAll(r)
+		if rc, ok := r.(io.ReadCloser); ok {
+			rc.Close()
+		}
 		if string(b) != string(data) {
 			t.Errorf("want %s have %s", data, b)
 		}

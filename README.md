@@ -149,8 +149,8 @@ This Go project stands up a tiny peer-to-peer storage cluster that mirrors Hadoo
 
 ## Getting Started
 ```bash
-git clone https://github.com/Ansh2004P/hdfs.git
-cd hdfs
+git clone https://github.com/nishant1810/ShardVault.git
+cd ShardVault
 make build
 make run   # Launches the demo workload
 make test  # Runs unit/integration tests
