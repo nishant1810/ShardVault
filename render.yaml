@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: shardvault
+    name: nishant1810-shardvault
     runtime: docker
     plan: free
     region: oregon

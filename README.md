@@ -161,7 +161,7 @@ When launched, it provides:
 3. Click **New +** → **Web Service** → Connect your `ShardVault` repository.
 4. Render automatically detects [`render.yaml`](render.yaml) and the [`Dockerfile`](Dockerfile).
 5. Click **Create Web Service**. 
-6. Within ~2 minutes, your live URL will be active at: `https://shardvault.onrender.com`!
+6. Within ~2 minutes, your live URL will be active at: `https://nishant1810-shardvault.onrender.com`!
 
 ### Option 2: Deploy on Railway
 1. Go to [Railway.app](https://railway.app).
