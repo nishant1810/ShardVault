@@ -1,8 +1,14 @@
 build:
-	@go build -o bin/fs
+	@go build -o bin/shardvault .
 
 run: build
-	@./bin/fs
+	@./bin/shardvault
 
 test:
 	@go test ./... -v
+
+docker-build:
+	@docker build -t shardvault .
+
+docker-run:
+	@docker compose up --build

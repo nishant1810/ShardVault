@@ -164,9 +164,35 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	return nil
 }
 
+func (s *FileServer) PeerCount() int {
+	s.peerLock.Lock()
+	defer s.peerLock.Unlock()
+	return len(s.peers)
+}
+
+func (s *FileServer) Has(key string) bool {
+	return s.store.Has(s.ID, key)
+}
+
+func (s *FileServer) DeleteLocal(key string) error {
+	return s.store.Delete(s.ID, key)
+}
+
+func (s *FileServer) StorageRootPath() string {
+	return s.StorageRoot
+}
+
+func (s *FileServer) Addr() string {
+	if s.Transport != nil {
+		return s.Transport.Addr()
+	}
+	return ""
+}
+
 func (s *FileServer) Stop() {
 	close(s.quitch)
 }
+
 
 func (s *FileServer) OnPeer(p p2p.Peer) error {
 	s.peerLock.Lock()

@@ -142,142 +142,56 @@ make test  # Runs unit/integration tests
 - Improve resilience with retries, acknowledgment messages, and peer health tracking.
 - Evaluate alternative transports (QUIC, gRPC streams) by implementing the `p2p.Transport` interface.
 
-## Interview Highlights# Hadoop_HDFS – Encrypted Peer-to-Peer File Store
+## 🌐 Live Web UI Dashboard & Interactive Topology
 
-## What This Project Does
-This Go project stands up a tiny peer-to-peer storage cluster that mirrors Hadoop-style replication on a much smaller scale. Three file servers spin up, talk over a custom TCP transport, encrypt every byte on the wire with AES-CTR, store content on disk using a content-addressable layout, delete local copies, and then fetch the missing payload back from peers to prove replication works.
+ShardVault now comes with a **cyber-tech glassmorphism web dashboard** embedded directly into the Go binary! 
+When launched, it provides:
+- **Live Node Health & Topology**: Real-time inspection of Node 1 (`:3000`), Node 2 (`:7000`), and Coordinator Node 3 (`:5000`).
+- **Interactive Encryption & Sharding**: Upload files, observe AES-256-CTR stream encryption with 16-byte random IVs, and SHA-1 CAS path derivation.
+- **P2P Self-Healing Chaos Test**: Delete a file locally on Node 3, then click "Fetch via P2P" to watch Node 3 automatically retrieve and heal the file over TCP from peer nodes.
+- **Automated 20x Benchmark Runner**: Run the replication stress test with live console streaming.
 
-## Getting Started
+---
+
+## 🚀 Cloud Deployment (Render / Railway / Fly.io)
+
+### Option 1: 1-Click Deploy on Render (Recommended)
+1. Push your repository to GitHub: `https://github.com/nishant1810/ShardVault`.
+2. Log into [Render.com](https://render.com).
+3. Click **New +** → **Web Service** → Connect your `ShardVault` repository.
+4. Render automatically detects [`render.yaml`](render.yaml) and the [`Dockerfile`](Dockerfile).
+5. Click **Create Web Service**. 
+6. Within ~2 minutes, your live URL will be active at: `https://shardvault.onrender.com`!
+
+### Option 2: Deploy on Railway
+1. Go to [Railway.app](https://railway.app).
+2. Click **New Project** → **Deploy from GitHub repo** → select `ShardVault`.
+3. Railway automatically builds the multi-stage `Dockerfile` and binds to `$PORT`.
+
+### Option 3: Docker & Docker Compose (Any Cloud VPS)
 ```bash
-git clone https://github.com/nishant1810/ShardVault.git
-cd ShardVault
-make build
-make run   # Launches the demo workload
-make test  # Runs unit/integration tests
+# Run with Docker Compose
+docker compose up -d
+
+# Check cluster status
+curl http://localhost:8080/api/status
 ```
 
-## High-Level Plan for Understanding the Codebase
-1. **Review Go fundamentals** that show up everywhere in the repo (packages, interfaces, goroutines, IO, crypto, filesystem handling).
-2. **Walk every file** (`main.go`, `server.go`, `store.go`, `crypto.go`, tests, tooling) line by line and explain the intent.
-3. **Call out concurrency and blocking** behavior so you know what runs synchronously, what spawns goroutines, and where bottlenecks can appear.
-4. **Summarize modification tips** so you can reason about future changes confidently.
+---
 
-## Go Crash Course (Through the Lens of This Repo)
-- **Packages & modules**: Each `.go` begins with `package main`, meaning the compiler builds an executable. `go.mod` names the module (`github.com/Ansh2004P/hdfs`) and pins dependency versions.
-- **Imports & namespacing**: Imports pull in standard-library helpers (`fmt`, `io`, `log`, `crypto/*`, etc.) plus the local `p2p` subpackage. Identifiers starting with capital letters are exported; lowercase stay package-private.
-- **Types & structs**: Composite behavior is modeled with structs (`type FileServer struct { ... }`). Methods follow `func (s *FileServer) ...` with pointer receivers when you need to mutate or share state.
-- **Interfaces**: Go uses implicit interface satisfaction. `io.Reader`, `io.Writer`, and `p2p.Transport` are satisfied whenever a type implements the necessary methods—no `implements` keyword.
-- **Concurrency**: `go func() { ... }()` starts goroutines. Blocking occurs on channel receives, reads/writes to the network, and file system calls. This project leverages goroutines mainly when bootstrapping servers; the transport hides per-connection goroutines internally.
-- **Error handling**: Idiomatic Go checks `if err != nil` after operations. `log.Fatal(err)` logs and exits the program immediately.
-- **Crypto & IO**: AES-CTR provides streaming-friendly symmetric encryption using 16-byte IVs. SHA-1 turns keys into stable directory paths; MD5 creates deterministic hashes for network lookups. Everything streams via `io.Reader`/`io.Writer`, so huge files don’t need to load in memory.
-- **Filesystem layout**: Content-addressable sharding splits hashes into five-character chunks (`68044/29f74/...`) to keep directories small and OS-friendly (Windows disallows `:` so addresses get sanitized).
+## 🛠️ REST API Specification
 
-## File-by-File Walkthrough
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/` | Cyber-tech interactive web dashboard |
+| `GET` | `/api/status` | Active nodes, peers, uptime, and cluster health |
+| `GET` | `/api/files` | Lists all stored objects and on-disk replica locations |
+| `POST` | `/api/store` | Encrypts and replicates a file across all peer nodes |
+| `GET` | `/api/file?key={key}` | Retrieves file (heals via P2P if missing locally) |
+| `POST` | `/api/delete-local?key={key}` | Deletes file from Coordinator disk to test P2P recovery |
+| `POST` | `/api/benchmark` | Runs replication verification workload |
 
-### `main.go` – Entry Point and Demo Harness
-- Declares `package main` and imports buffers, formatting, IO, logging, string helpers, timing, and the internal `p2p` package.
-- `sanitizeRoot`: trims whitespace, strips leading `:`, replaces remaining `:` with `_`, and defaults to `node_network` if empty. Ensures Windows-safe directory names per listen address.
-- `makeServer`: constructs a `p2p.TCPTransport` with no-op handshake and default gob decoder, then assembles `FileServerOpts` (fresh encryption key, sanitized storage root, CAS path transform, transport, bootstrap list). Hooks `tcpTransport.OnPeer` to the server’s `OnPeer` method and returns the server.
-- `main`: spins up three servers:
-	- `s1` on `:3000`, `s2` on `:7000`, `s3` on `:5000` bootstrapping to the other two.
-	- Starts `s1` and `s2` in goroutines with `log.Fatal` wrapping `Start()` to capture errors, using sleeps to stagger startup.
-	- Launches `s3` (without `log.Fatal`, a known inconsistency worth noting) after more delays.
-	- Demo loop (20 iterations): write `picture_i.png` via `s3.Store`, sleep to let replication finish, delete the local copy, fetch it back with `s3.Get`, read all bytes, close file descriptors when possible, and print the payload. Demonstrates replication + retrieval of encrypted data.
-
-#### Concurrency Notes (`main.go`)
-- Goroutines for `Start()` calls let the process continue while servers block inside their event loops.
-- Sleep-based coordination is blocking but sufficient for the deterministic demo. Production code would replace sleeps with health checks or readiness signals.
-- `Store`/`Get` run synchronously and block on disk/network IO.
-
-### `server.go` – Distributed File Server Core
-- Imports message framing (`bytes`, `encoding/binary`), gob serialization, logging, synchronization, timing, and the local transport library.
-- `FileServerOpts`: configuration for node ID (autogenerated if empty), encryption key, storage root, path transform, transport, and bootstrap peers.
-- `FileServer`: embeds options and adds `peerLock` (`sync.Mutex`), peer map (`map[string]p2p.Peer`), local `Store`, and quit channel.
-- `NewFileServer`: fills defaults (CAS transform, default root, random ID), constructs the store, initializes peer map, and returns the server.
-- `broadcast`: gob-encodes a `Message`, then iterates peers sending an `IncomingMessage` marker byte followed by the serialized payload. Any send error aborts the broadcast.
-- Message types: `Message` with `Payload any`, plus concrete `MessageStoreFile`/`MessageGetFile` variants registered in `init()` for gob.
-- `Get`:
-	- If local store has the file, return it immediately.
-	- Otherwise, broadcast `MessageGetFile` containing the hashed key, wait 500 ms, then for each peer read an `int64` size (`binary.Read`), limit readers to that size, decrypt into local store (`WriteDecrypt`), log receipt, and close the stream. Finally re-open from disk and return the reader.
-- `Store`:
-	- Tee incoming data to both disk (`Store.Write`) and an in-memory buffer.
-	- Broadcast `MessageStoreFile` advertising hashed key and encrypted byte count (`size + 16` for IV).
-	- Sleep 5 ms, build `io.Writer` list from peers, send an `IncomingStream` marker, encrypt the buffered data via `copyEncrypt`, and write to all peers simultaneously with `io.MultiWriter`.
-- `Stop`: closes `quitch` to break the loop.
-- `OnPeer`: guards `peers` with `peerLock`, adds the connection keyed by remote address, logs the connection.
-- `loop`: defer closing transport, then select between network RPCs (`Transport.Consume()` channel) and quit signal. Each RPC payload is gob-decoded; errors are logged but non-fatal. `handleMessage` dispatches based on payload concrete type.
-- `handleMessageGetFile`: validates existence, reads file, optionally defers close, fetches peer, sends `IncomingStream`, writes file size (`binary.Write`), streams bytes with `io.Copy`, and logs.
-- `handleMessageStoreFile`: finds peer, reads limited bytes (size includes IV), writes to store, logs, and closes the stream.
-- `bootstrapNetwork`: for each bootstrap address, spawns a goroutine that attempts to dial, logging outcomes.
-- `Start`: logs startup, calls `Transport.ListenAndAccept()` (blocks until listening or fails), kicks off bootstrap dials, and then enters `loop()`.
-- `init`: registers message structs with gob.
-
-#### Concurrency & Blocking (`server.go`)
-- `loop()` processes messages sequentially; a long-running handler (e.g., `io.Copy` to a slow peer) blocks the entire loop. Mention this as a scaling limitation.
-- `broadcast` iterates peers without locking; safe because only `OnPeer` mutates under lock, but if peers drop concurrently, you’d need more protection.
-- `io.MultiWriter` means one slow peer backpressures all others—a candidate for per-peer goroutines.
-- Network reads (`binary.Read`, `io.Copy`, `io.LimitReader`) block until bytes arrive.
-
-### `store.go` – Content-Addressable Storage Layer
-- Imports hashing (`sha1`), hex encoding, filesystem and logging utilities.
-- `CASPathTransformFunc`: SHA-1 hash of key → hex string → split into eight 5-char chunks → join with `/` to form nested directories; returns `PathKey` (path, filename).
-- `PathTransformFunc` type alias allows custom transforms.
-- `PathKey` methods:
-	- `FirstPathName`: first directory component, used for deletions.
-	- `FullPath`: `PathName/Filename` string.
-- `StoreOpts`: root directory and path transform.
-- `DefaultPathTransformFunc`: identity mapping for simple cases.
-- `Store`: embeds opts.
-- `NewStore`: fills defaults (transform, root) and constructs the struct.
-- `Has`: builds full path `root/id/path/file`, uses `os.Stat`, and returns true unless error is `os.ErrNotExist`.
-- `Clear`: `os.RemoveAll` on the root directory.
-- `Delete`: compute path, remove the top-level hashed folder with `os.RemoveAll`, log deletion.
-- `Write`: thin wrapper around `writeStream` to keep API consistent.
-- `WriteDecrypt`: open file (ensuring directories exist), defer close, call `copyDecrypt`, and return bytes written as `int64`.
-- `openFileForWriting`: `os.MkdirAll` to create directories, `os.Create` to truncate/create file, and return the handle.
-- `writeStream`: open file, defer close, `io.Copy` reader to file.
-- `Read`: wrapper returning `readStream` result.
-- `readStream`: open file, get `Stat` for size, and return `(size, file)` where file is an `io.ReadCloser`.
-
-#### File System Considerations
-- All file operations block. Directory creation and deletion happen synchronously and can be expensive for large stores.
-- Path sanitation happens earlier in `main.go`; by the time we assemble paths here they are OS-compatible.
-
-### `crypto.go` – IDs and Streaming Encryption
-- Imports AES block cipher, CTR stream helper, MD5 hashing, secure randomness, and hex/IO helpers.
-- `generateID`: 32 random bytes → hex string; used for node IDs.
-- `hashKey`: MD5 hash of file key → hex string for consistent naming across peers.
-- `newEncryptionKey`: 32 random bytes returned raw (for AES-256 keys).
-- `copyStream`: shared helper that reads in 32 KiB chunks, XORs via the provided `cipher.Stream`, writes to destination, and counts bytes (initial count seeded with block size so the caller can include IV length in totals).
-- `copyDecrypt`: new AES cipher with key, read IV from source, init CTR stream, delegate to `copyStream`.
-- `copyEncrypt`: new AES cipher, generate random IV, write IV to destination, init CTR stream, delegate to `copyStream`.
-
-#### Crypto Notes
-- AES-CTR keeps memory usage low because it works on streams; IV uniqueness is critical and satisfied by random 16-byte prefix per transfer.
-- `rand.Reader` may block if the OS entropy pool is empty, though that’s rare on modern systems.
-- `copyStream` returns total bytes including the IV when used with CTR helpers; callers account for this (`size + 16`).
-
-### Tests and Tooling
-- `crypto_test.go`: ensures `copyEncrypt` and `copyDecrypt` round-trip payloads and that byte counts include the IV.
-- `store_test.go`: validates CAS path transform, repeated writes/reads/deletes (50 iterations), and teardown cleanup via `Store.Clear()`.
-- `Makefile`: `build` (compile to `bin/fs`), `run` (build + execute demo), `test` (verbose `go test ./...`).
-- `go.mod`: module name, Go version target (1.25.0 for future-proofing), indirect dependencies pulled by testing frameworks.
-- `.gitignore`: excludes binaries, temp files, hashed test directories, IDE artifacts.
-
-## Concurrency, Blocking, and Network Flow Summary
-- **Startup**: `main` launches each `FileServer` in its own goroutine. Each server’s `Start()` blocks internally on `Transport.ListenAndAccept()` and then runs the event loop.
-- **Event loop**: `loop()` processes one message at a time. Long handlers (e.g., large file copies) block further message handling.
-- **Network marking**: Control messages send an `IncomingMessage` byte then gob payload; streams send `IncomingStream` followed by size (little endian) and raw bytes.
-- **Blocking IO**: File reads/writes, network send/receive, and sleeps are all blocking operations. There is no use of buffered channels or async IO in this version.
-- **Potential improvements**: spawn goroutines per outgoing stream, add acknowledgments, introduce buffered channels, or adopt non-blocking event loops.
-
-## How to Modify the System Safely
-- When adding new message types, register them in `init()` so gob can encode/decode them.
-- If you tweak path hashing (e.g., change chunk size or hash algorithm), update `store_test.go` expectations and ensure directories remain OS-compatible.
-- If you change encryption (key length, cipher mode), adjust both encrypt and decrypt helpers and ensure byte counts remain consistent (update `MessageStoreFile.Size`).
-- Wrap long-running handlers in goroutines if you need concurrency, but guard shared state (`peers`, `store`) with proper synchronization.
-- Add configuration (flags/env) for listen addresses and bootstrap nodes to run multiple binaries on different machines.
-
+---
 
 ## Future Enhancements Worth Considering
 - Replace sleep-based coordination with heartbeats or readiness probes.
@@ -287,18 +201,10 @@ make test  # Runs unit/integration tests
 - Evaluate alternative transports (QUIC, gRPC streams) by implementing the `p2p.Transport` interface.
 
 ## Interview Highlights
-- **Security**: AES-CTR with per-stream IV keeps replication confidential while allowing streaming transfers.
-- **Storage design**: Content-addressable hashing spreads files evenly and avoids enormous directory listings.
-- **Networking**: Gob-encoded control plane plus raw data plane mirrors patterns in real distributed systems.
-- **Limitations & Next Steps**: Single-threaded event loop and blocking IO keep the code simple but limit scalability—be ready to discuss improvements.
+- **Confidentiality & Streaming Crypto**: AES-CTR with 16-byte random IV per transfer ensures streaming security without buffering large files into memory.
+- **Content-Addressable Storage (CAS)**: SHA-1 sharded directories (`/hash[0:5]/hash[5:10]/...`) keep directory listings performant on both Linux and Windows.
+- **Self-Healing P2P Topology**: Automatic failover retrieves missing replicas over raw TCP streams without requiring a centralized master.
+- **Embedded Web Dashboard**: Native Go standard library `net/http` and `embed.FS` bundles the entire frontend UI into a single deployable binary.
 
 ## License
-This project currently does not declare a license. Add one before sharing publicly to clarify usage rights.
-
-- **Security**: AES-CTR with per-stream IV keeps replication confidential while allowing streaming transfers.
-- **Storage design**: Content-addressable hashing spreads files evenly and avoids enormous directory listings.
-- **Networking**: Gob-encoded control plane plus raw data plane mirrors patterns in real distributed systems.
-- **Limitations & Next Steps**: Single-threaded event loop and blocking IO keep the code simple but limit scalability—be ready to discuss improvements.
-
-## License
-This project currently does not declare a license. Add one before sharing publicly to clarify usage rights.
+MIT License.

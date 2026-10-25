@@ -2,9 +2,8 @@ package main
 
 import (
 	"bytes"
-	"fmt"
-	"io"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -58,36 +57,48 @@ func main() {
 	time.Sleep(500 * time.Millisecond)
 	go func() { log.Fatal(s2.Start()) }()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
-	go s3.Start()
-	time.Sleep(2 * time.Second)
+	go func() { log.Fatal(s3.Start()) }()
+	time.Sleep(1500 * time.Millisecond)
 
-	for i := 0; i < 20; i++ {
-		key := fmt.Sprintf("picture_%d.png", i)
-		data := bytes.NewReader([]byte("my big data file here!"))
-		s3.Store(key, data)
-		time.Sleep(500 * time.Millisecond) // Allow file operations to complete
+	cm := NewClusterManager(s1, s2, s3)
 
-		if err := s3.store.Delete(s3.ID, key); err != nil {
-			log.Fatal(err)
-		}
-
-		r, err := s3.Get(key)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		b, err := io.ReadAll(r)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// Close the file handle if it's a ReadCloser
-		if rc, ok := r.(io.ReadCloser); ok {
-			rc.Close()
-		}
-
-		fmt.Println(string(b))
+	// Pre-seed 3 demonstration files into the cluster so the dashboard is immediately populated
+	sampleFiles := []struct {
+		key     string
+		content string
+	}{
+		{
+			key:     "welcome_cluster_manifest.json",
+			content: "{\n  \"cluster\": \"ShardVault-Production\",\n  \"cipher\": \"AES-256-CTR\",\n  \"hashing\": \"SHA1-CAS\",\n  \"nodes\": 3,\n  \"status\": \"healthy\"\n}",
+		},
+		{
+			key:     "p2p_replication_proof.txt",
+			content: "ShardVault distributed storage verified! Data is split into 5-character CAS chunk directories and mirrored to all connected peers.",
+		},
+		{
+			key:     "secret_vault_payload.dat",
+			content: "Top secret encrypted data stream. On-wire transport is protected with 16-byte random IVs per transfer.",
+		},
 	}
+
+	for _, sf := range sampleFiles {
+		data := bytes.NewReader([]byte(sf.content))
+		if err := s3.Store(sf.key, data); err == nil {
+			cm.RegisterFile(sf.key, int64(len(sf.content)))
+		}
+	}
+	time.Sleep(300 * time.Millisecond)
+	for _, sf := range sampleFiles {
+		cm.UpdateFileReplicas(sf.key)
+	}
+
+	// Read PORT from environment (for Render / Railway / Fly.io / Heroku), default to 8080
+	port := os.Getenv("PORT")
+	if len(port) == 0 {
+		port = "8080"
+	}
+
+	StartHTTPServer(port, cm)
 }

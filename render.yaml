@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: shardvault
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: Dockerfile
+    healthCheckPath: /api/status
+    envVars:
+      - key: PORT
+        value: 8080

@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  shardvault:
+    build: .
+    container_name: shardvault-cluster
+    restart: always
+    ports:
+      - "8080:8080" # Web Dashboard & REST API
+      - "3000:3000" # Node 1 P2P Transport
+      - "7000:7000" # Node 2 P2P Transport
+      - "5000:5000" # Node 3 P2P Coordinator
+    environment:
+      - PORT=8080
+    volumes:
+      - shardvault-data:/root
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/status"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  shardvault-data:
